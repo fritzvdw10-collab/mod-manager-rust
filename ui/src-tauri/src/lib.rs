@@ -1169,6 +1169,18 @@ fn menu_link(
     Ok(format!("{} · {} -> {}", screen, event, target))
 }
 
+#[tauri::command]
+fn menu_clone(root: String, screen: String, target: String) -> CmdResult<String> {
+    use fl27mm::menus;
+    let screens = menus::load(Path::new(&root)).map_err(e)?;
+    let (copy, destination) = menus::clone_screen(&screens, &screen, &target).map_err(e)?;
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent).map_err(e)?;
+    }
+    menus::write(&copy).map_err(e)?;
+    Ok(copy.id)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Cache::default())
@@ -1186,7 +1198,7 @@ pub fn run() {
             bin_patch,
             asset_list, asset_replace, asset_preview,
             gani_read, gani_rate, gani_set_key, rig_read,
-            menu_check, menu_link,
+            menu_check, menu_link, menu_clone,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the FL27 mod manager");

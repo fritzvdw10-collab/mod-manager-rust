@@ -98,16 +98,17 @@ pub fn load(root: &Path) -> Result<BTreeMap<String, Screen>> {
     let flow = find_flow(root)?;
     let mut out = BTreeMap::new();
     for p in crate::fsutil::files(&flow) {
-        if p.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()) != Some("json".into()) {
+        if p.extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase())
+            != Some("json".into())
+        {
             continue;
         }
         let rel = p.strip_prefix(&flow).unwrap_or(&p);
-        let id = rel
-            .with_extension("")
-            .to_string_lossy()
-            .replace('\\', "/");
-        let text = std::fs::read_to_string(&p)
-            .with_context(|| format!("reading {}", p.display()))?;
+        let id = rel.with_extension("").to_string_lossy().replace('\\', "/");
+        let text =
+            std::fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;
         let mut screen: Screen = match serde_json::from_str(&text) {
             Ok(s) => s,
             Err(e) => {
@@ -151,7 +152,10 @@ fn find_flow(root: &Path) -> Result<PathBuf> {
 /// Normalise a target the way the engine sees one: case-insensitive on the
 /// final segment is a real source of dead buttons across packs.
 fn normalise(s: &str) -> String {
-    s.trim().replace('\\', "/").trim_end_matches(".json").to_string()
+    s.trim()
+        .replace('\\', "/")
+        .trim_end_matches(".json")
+        .to_string()
 }
 
 /// Check every link and report the ones that go nowhere.
@@ -208,7 +212,9 @@ pub fn validate_with(screens: &BTreeMap<String, Screen>, extra_roots: &[PathBuf]
                     screen: id.clone(),
                     event: name.clone(),
                     target: target.clone(),
-                    why: format!("exists as {exact} but differs in case; the engine will not follow it"),
+                    why: format!(
+                        "exists as {exact} but differs in case; the engine will not follow it"
+                    ),
                 });
                 continue;
             }
@@ -231,8 +237,7 @@ pub fn validate_with(screens: &BTreeMap<String, Screen>, extra_roots: &[PathBuf]
             let last = normalise(k).rsplit('/').next().unwrap_or("").to_string();
             // Unreachable is only meaningful within this set: a screen pointed
             // at from the base game is not dead weight.
-            !referenced.contains(&normalise(k))
-                && !entry_prefixes.iter().any(|p| last.contains(*p))
+            !referenced.contains(&normalise(k)) && !entry_prefixes.iter().any(|p| last.contains(*p))
         })
         .cloned()
         .collect();
@@ -260,7 +265,8 @@ pub fn write(screen: &Screen) -> Result<()> {
     let json = serde_json::to_string_pretty(screen).context("serialising the screen")?;
     let tmp = screen.path.with_extension("json.fl27mm-tmp");
     std::fs::write(&tmp, json.as_bytes()).with_context(|| format!("writing {}", tmp.display()))?;
-    std::fs::rename(&tmp, &screen.path).with_context(|| format!("saving {}", screen.path.display()))?;
+    std::fs::rename(&tmp, &screen.path)
+        .with_context(|| format!("saving {}", screen.path.display()))?;
     Ok(())
 }
 
@@ -280,20 +286,28 @@ pub fn set_target(
         .clone();
     let t = normalise(target);
     if !allow_missing && !screens.contains_key(&t) {
-        let known: Vec<&String> = screens.keys().filter(|k| k.to_lowercase().contains(&t.to_lowercase())).collect();
+        let known: Vec<&String> = screens
+            .keys()
+            .filter(|k| k.to_lowercase().contains(&t.to_lowercase()))
+            .collect();
         bail!(
             "{t} is not in the set{}",
             if known.is_empty() {
                 String::new()
             } else {
-                format!("; closest names: {}", known.iter().take(5).map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
+                format!(
+                    "; closest names: {}",
+                    known
+                        .iter()
+                        .take(5)
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             }
         );
     }
-    sc.events
-        .entry(event.to_string())
-        .or_default()
-        .to = Some(t);
+    sc.events.entry(event.to_string()).or_default().to = Some(t);
     Ok(sc)
 }
 
@@ -308,11 +322,28 @@ pub fn clone_screen(
         .get(from)
         .with_context(|| format!("no screen {from} to copy"))?;
     let target = normalise(to);
+    if target.is_empty()
+        || target.split('/').any(|part| {
+            part.is_empty()
+                || part == "."
+                || part == ".."
+                || part.ends_with([' ', '.'])
+                || part
+                    .chars()
+                    .any(|c| matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*' | '\0'))
+        })
+    {
+        bail!(
+            "invalid screen id {target:?}; use non-empty path segments without reserved characters"
+        );
+    }
     if screens.contains_key(&target) {
         bail!("{target} already exists; refusing to overwrite a working screen");
     }
     let flow = find_flow_parent(&src.path)?;
-    let dest = flow.join(target.replace('/', std::path::MAIN_SEPARATOR_STR)).with_extension("json");
+    let dest = flow
+        .join(target.replace('/', std::path::MAIN_SEPARATOR_STR))
+        .with_extension("json");
     if dest.exists() {
         bail!("{} already exists on disk", dest.display());
     }
@@ -343,7 +374,10 @@ mod tests {
         for (name, to) in targets {
             events.insert(
                 (*name).to_string(),
-                Event { to: Some((*to).to_string()), ..Default::default() },
+                Event {
+                    to: Some((*to).to_string()),
+                    ..Default::default()
+                },
             );
         }
         Screen {
@@ -373,7 +407,11 @@ mod tests {
         let r2 = validate(&s2);
         assert_eq!(r2.broken.len(), 1);
         assert_eq!(r2.broken[0].event, "start");
-        assert!(r2.broken[0].why.contains("does nothing"), "{}", r2.broken[0].why);
+        assert!(
+            r2.broken[0].why.contains("does nothing"),
+            "{}",
+            r2.broken[0].why
+        );
     }
 
     /// Case differences are the sneaky failure: the file exists, the engine
@@ -415,9 +453,24 @@ mod tests {
 
     #[test]
     fn cloning_refuses_to_clobber() {
-        let s = set(&[screen("BL/BLMainMenu", &[("start", "BL/BLSettings")]), screen("BL/BLSettings", &[])]);
+        let s = set(&[
+            screen("BL/BLMainMenu", &[("start", "BL/BLSettings")]),
+            screen("BL/BLSettings", &[]),
+        ]);
         let err = clone_screen(&s, "BL/BLMainMenu", "BL/BLSettings").unwrap_err();
         assert!(err.to_string().contains("already exists"), "{err}");
+    }
+
+    #[test]
+    fn cloning_rejects_paths_that_escape_the_flow_folder() {
+        let s = set(&[screen("BL/BLMainMenu", &[])]);
+        for target in ["../outside", "BL/../outside", "C:/outside", "BL/"] {
+            let err = clone_screen(&s, "BL/BLMainMenu", target).unwrap_err();
+            assert!(
+                err.to_string().contains("invalid screen id"),
+                "{target}: {err}"
+            );
+        }
     }
 
     /// Round-tripping must not lose fields this tool does not model: a real
@@ -429,7 +482,10 @@ mod tests {
         sc.id = "BL/BLGeneralSettingsMain".into();
         let out = serde_json::to_string(&sc).unwrap();
         assert!(out.contains("\"bgId\""), "{out}");
-        assert!(out.contains("\"custom\":\"keep\""), "an unmodelled event field was dropped: {out}");
+        assert!(
+            out.contains("\"custom\":\"keep\""),
+            "an unmodelled event field was dropped: {out}"
+        );
         assert!(out.contains("BG_X"));
     }
 
@@ -451,5 +507,7 @@ pub fn target_known(screens: &BTreeMap<String, Screen>, bases: &[PathBuf], targe
     if screens.contains_key(&t) {
         return true;
     }
-    bases.iter().any(|b| load(b).map(|o| o.contains_key(&t)).unwrap_or(false))
+    bases
+        .iter()
+        .any(|b| load(b).map(|o| o.contains_key(&t)).unwrap_or(false))
 }

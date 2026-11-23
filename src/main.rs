@@ -15,7 +15,7 @@
 //!   cpk        list, extract or rebuild a CRIWARE archive
 //!   ftex       convert Fox Engine textures to and from DDS
 //!   container  unwrap, inspect or re-wrap a WESYS/asset container
-//!   bin        decode a .bin: sections, records, strings and hex
+//!   bin        decode a .bin: sections, records, menu atlases, strings and hex
 
 use fl27mm::{binread, conflict, cpk, ftex, ini, order, packs, pesdb, wesys};
 
@@ -109,7 +109,7 @@ enum Cmd {
         #[arg(long, default_value = "diffuse")]
         kind: String,
     },
-    /// Decode a .bin: framing, match-constant sections, table records, hex.
+    /// Decode a .bin: framing, sections, table records, menu atlases and hex.
     Bin {
         /// The .bin file.
         file: PathBuf,
@@ -470,6 +470,35 @@ fn cmd_bin(file: &Path, section: Option<usize>, bytes: usize) -> Result<()> {
         }
         println!("
   hex-dump one with --section N");
+    }
+    if let Some(menu) = &r.menu_layout {
+        println!(
+     "\n   compiled menu atlas: {} · {} textures · {} named pictures",
+     menu.package_name,
+     menu.textures.len(),
+     menu.pictures.len()
+        );
+        for (i, texture) in menu.textures.iter().enumerate() {
+     println!(
+         "    texture {i}: {} × {} · format 0x{:02x}",
+         texture.width, texture.height, texture.format
+     );
+        }
+        for picture in menu.pictures.iter().take(12) {
+     println!(
+         "    {:<32} texture {}  atlas [{:.1}, {:.1}]–[{:.1}, {:.1}] px",
+         picture.name,
+         picture.texture,
+         picture.x0_half as f32 / 2.0,
+         picture.y0_half as f32 / 2.0,
+         picture.x1_half as f32 / 2.0,
+         picture.y1_half as f32 / 2.0
+     );
+        }
+        if menu.pictures.len() > 12 {
+     println!("    … {} more pictures", menu.pictures.len() - 12);
+        }
+        println!("    rectangles are texture-atlas coordinates, not screen positions");
     }
     if let Some(t) = &r.records {
         println!("
